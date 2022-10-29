@@ -134,6 +134,7 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
+// 给虚拟地址va上映射size大小的来自pa上的内容
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -431,4 +432,73 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+void uvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm){
+    if(mappages(kpgtbl, va, sz, pa, perm) != 0)
+        panic("uvmmap");
+}
+pagetable_t proc_kpt_init(){
+    pagetable_t kernelpt = uvmcreate();
+    if(kernelpt==0)return 0;
+    uvmmap(kernelpt,UART0,UART0,PGSIZE,PTE_R|PTE_W);
+    uvmmap(kernelpt,VIRTIO0,VIRTIO0,PGSIZE,PTE_R|PTE_W);
+    uvmmap(kernelpt,CLINT,CLINT,0x10000,PTE_R|PTE_W);
+    uvmmap(kernelpt,PLIC,PLIC,0x400000,PTE_R|PTE_W);
+    uvmmap(kernelpt,KERNBASE,KERNBASE,(uint64)etext-KERNBASE,PTE_R|PTE_X);
+    uvmmap(kernelpt,(uint64)etext,(uint64)etext,PHYSTOP-(uint64)etext,PTE_R|PTE_W);
+    uvmmap(kernelpt,TRAMPOLINE,(uint64)trampoline,PGSIZE,PTE_R|PTE_X);
+    return kernelpt;
+}
+/*
+void vmprint_level(pagetable_t pagetable, uint64 level) {
+    //    if(level>3){return;}
+    for (int i = 0; i < 512; i++) {
+        pte_t pte = pagetable[i];
+        if (pte & PTE_V) {
+            for (int j = 0; j < level; j++) {
+                if (j)
+                    printf(" ");
+                printf("..");
+            }
+            pagetable_t child = (pagetable_t)PTE2PA(pte);
+            printf("%d: pte %p pa %p\n", i, pte, child);
+            if ((pte & (PTE_R | PTE_W | PTE_X)) ==
+                0) { //不在最后一层（最后一层必是可读、可写或者可执行的）
+                vmprint_level((pagetable_t)child, level + 1);
+            }
+        }
+    }
+}
+
+void vmprint(pagetable_t pagetable) {
+    printf("page table %p\n", pagetable);
+    vmprint_level(pagetable, 1);
+}*/
+void vmprint(pagetable_t pagetable)
+{
+    printf("page table %p\n", pagetable);
+    for (int i = 0; i < 512; i++)
+    {
+        pte_t pte = pagetable[i];
+        if (pte & PTE_V)
+        {
+            pagetable_t pa = (pagetable_t)PTE2PA(pte);
+            printf("..%d: pte %p pa %p\n", i, pte, pa);
+            for(int j=0;j<512;j++){
+                pte_t pte2 = pa[j];
+                if(pte2&PTE_V){
+                    pagetable_t pa2 = (pagetable_t)PTE2PA(pte2);
+                    printf(".. ..%d: pte %p pa %p\n", j, pte2, pa2);
+                    for(int k=0; k<512; k++){
+                        pte_t pte3=pa2[k];
+                        if(pte3&PTE_V){
+                            pagetable_t pa3=(pagetable_t)PTE2PA(pte3);
+                            printf(".. .. ..%d: pte %p pa %p\n",k,pte3,pa3);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

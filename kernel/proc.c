@@ -134,6 +134,12 @@ found:
     release(&p->lock);
     return 0;
   }
+  // Init the kernel page table
+  p->kernelpt=proc_kpt_init();
+  if(p->kernelpt==0){
+      freeproc(p);
+      release(&p->lock);
+  }
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
