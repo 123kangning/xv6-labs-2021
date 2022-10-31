@@ -77,6 +77,7 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+//得到精确的最后一个页面
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
@@ -109,7 +110,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
   if(va >= MAXVA)
     return 0;
 
-  pte = walk(pagetable, va, 0);
+  pte = walk(pagetable, va, 0); //修改
   if(pte == 0)
     return 0;
   if((*pte & PTE_V) == 0)
@@ -450,7 +451,6 @@ pagetable_t proc_kpt_init(){
     uvmmap(kernelpt,TRAMPOLINE,(uint64)trampoline,PGSIZE,PTE_R|PTE_X);
     return kernelpt;
 }
-/*
 void vmprint_level(pagetable_t pagetable, uint64 level) {
     //    if(level>3){return;}
     for (int i = 0; i < 512; i++) {
@@ -474,31 +474,31 @@ void vmprint_level(pagetable_t pagetable, uint64 level) {
 void vmprint(pagetable_t pagetable) {
     printf("page table %p\n", pagetable);
     vmprint_level(pagetable, 1);
-}*/
-void vmprint(pagetable_t pagetable)
-{
-    printf("page table %p\n", pagetable);
-    for (int i = 0; i < 512; i++)
-    {
-        pte_t pte = pagetable[i];
-        if (pte & PTE_V)
-        {
-            pagetable_t pa = (pagetable_t)PTE2PA(pte);
-            printf("..%d: pte %p pa %p\n", i, pte, pa);
-            for(int j=0;j<512;j++){
-                pte_t pte2 = pa[j];
-                if(pte2&PTE_V){
-                    pagetable_t pa2 = (pagetable_t)PTE2PA(pte2);
-                    printf(".. ..%d: pte %p pa %p\n", j, pte2, pa2);
-                    for(int k=0; k<512; k++){
-                        pte_t pte3=pa2[k];
-                        if(pte3&PTE_V){
-                            pagetable_t pa3=(pagetable_t)PTE2PA(pte3);
-                            printf(".. .. ..%d: pte %p pa %p\n",k,pte3,pa3);
-                        }
-                    }
-                }
-            }
+}
+void proc_inithart(pagetable_t pkt) {
+    w_satp(MAKE_SATP(pkt));
+    sfence_vma();
+}
+
+int pgaccess(pagetable_t pagetable,uint64 start_va,int page_num,uint64 result_va){
+    if(page_num>64){
+        panic("pgaccess: too much pages");
+        return -1;
+    }
+    unsigned int bitmask=0;
+    int cur_bitmask=1;
+    int count=0;
+    uint64 va=start_va;
+    pte_t *pte;
+    for(;count<page_num;count++,va+=PGSIZE){
+        if((pte=walk(pagetable,va,0))==0){
+            panic("pgaccess: pte should exist");
+        }
+        if(*pte&PTE_A){
+            bitmask|=(cur_bitmask<<count);
+            *pte&=~PTE_A;
         }
     }
+    copyout(pagetable,result_va,(char*)&bitmask,sizeof(bitmask));
+    return 0;
 }
