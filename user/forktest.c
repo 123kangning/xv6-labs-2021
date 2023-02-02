@@ -1,3 +1,4 @@
+
 // Test that fork fails gracefully.
 // Tiny executable so that the limit can be filling the proc table.
 
@@ -17,7 +18,6 @@ void
 forktest(void)
 {
   int n, pid;
-
   print("fork test\n");
 
   for(n=0; n<N; n++){
